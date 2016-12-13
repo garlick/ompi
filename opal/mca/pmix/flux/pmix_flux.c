@@ -269,7 +269,7 @@ static int PMI_KVS_Commit (const char *kvsname)
 }
 
 static int PMI_KVS_Get (const char *kvsname, const char *key,
-		        char *value, int len)
+                        char *value, int len)
 {
     int (*f)(const char *, const char *, char *, int);
     *(void **)(&f) = dso ? dlsym (dso, "PMI_KVS_Get") : NULL;
@@ -287,7 +287,7 @@ static int PMI_Get_clique_ranks (int *ranks, int length)
 {
     int (*f)(int *, int);
     *(void **)(&f) = dso ? dlsym (dso, "PMI_Get_clique_ranks") : NULL;
-	return f ? f (ranks, length) : PMI_FAIL;
+    return f ? f (ranks, length) : PMI_FAIL;
 }
 
 #endif /* !HAVE_FLUX_PMI_LIBRARY */
@@ -730,7 +730,7 @@ static void fencenb(int sd, short args, void *cbdata)
     if (!got_modex_data) {
         got_modex_data = true;
         /* we only need to set locality for each local rank as "not found"
-     * equates to "non-local" */
+         * equates to "non-local" */
         for (i=0; i < nlranks; i++) {
             flux_pname.vpid = lranks[i];
             rc = opal_pmix_base_cache_keys_locally(&flux_pname, OPAL_PMIX_CPUSET,
@@ -741,8 +741,7 @@ static void fencenb(int sd, short args, void *cbdata)
             }
             if (NULL == kp || NULL == kp->data.string) {
                 /* if we share a node, but we don't know anything more, then
-         * mark us as on the node as this is all we know
-         */
+                 * mark us as on the node as this is all we know */
                 locality = OPAL_PROC_ON_CLUSTER | OPAL_PROC_ON_CU | OPAL_PROC_ON_NODE;
             } else {
                 /* determine relative location on our node */
