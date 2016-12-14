@@ -41,8 +41,6 @@ static int flux_initialized(void);
 static int flux_abort(int flag, const char msg[],
                     opal_list_t *procs);
 static int flux_commit(void);
-static int flux_fencenb(opal_list_t *procs, int collect_data,
-                      opal_pmix_op_cbfunc_t cbfunc, void *cbdata);
 static int flux_fence(opal_list_t *procs, int collect_data);
 static int flux_put(opal_pmix_scope_t scope,
                   opal_value_t *kv);
@@ -66,7 +64,6 @@ const opal_pmix_base_module_t opal_pmix_flux_module = {
     .initialized = flux_initialized,
     .abort = flux_abort,
     .commit = flux_commit,
-    .fence_nb = flux_fencenb,
     .fence = flux_fence,
     .put = flux_put,
     .get = flux_get,
@@ -86,17 +83,6 @@ const opal_pmix_base_module_t opal_pmix_flux_module = {
 // usage accounting
 static int pmix_init_count = 0;
 
-// local object
-typedef struct {
-    opal_object_t super;
-    opal_event_t ev;
-    opal_pmix_op_cbfunc_t opcbfunc;
-    void *cbdata;
-} pmi_opcaddy_t;
-static OBJ_CLASS_INSTANCE(pmi_opcaddy_t,
-                          opal_object_t,
-                          NULL, NULL);
-
 // PMI constant values:
 static int pmix_kvslen_max = 0;
 static int pmix_keylen_max = 0;
@@ -113,7 +99,6 @@ static int pmix_packed_encoded_data_offset = 0;
 static int pmix_pack_key = 0;
 static opal_process_name_t flux_pname;
 static int *lranks = NULL, nlranks;
-static bool got_modex_data = false;
 
 static char* pmix_error(int pmix_err);
 #define OPAL_PMI_ERROR(pmi_err, pmi_func)                       \
@@ -699,126 +684,15 @@ static int flux_commit(void)
     return OPAL_SUCCESS;
 }
 
-static void fencenb(int sd, short args, void *cbdata)
-{
-    pmi_opcaddy_t *op = (pmi_opcaddy_t*)cbdata;
-    int rc = OPAL_SUCCESS;
-    int32_t i;
-    opal_value_t *kp, kvn;
-    opal_hwloc_locality_t locality;
-    opal_process_name_t flux_pname;
-
-    opal_output_verbose(2, opal_pmix_base_framework.framework_output,
-                        "%s pmix:flux called fence",
-                        OPAL_NAME_PRINT(OPAL_PROC_MY_NAME));
-
-    /* use the PMI barrier function */
-    if (PMI_SUCCESS != (rc = PMI_Barrier())) {
-        OPAL_PMI_ERROR(rc, "PMI_Barrier");
-        rc = OPAL_ERROR;
-        goto cleanup;
-    }
-
-    opal_output_verbose(2, opal_pmix_base_framework.framework_output,
-                        "%s pmix:flux barrier complete",
-                        OPAL_NAME_PRINT(OPAL_PROC_MY_NAME));
-
-    /* get the modex data from each local process and set the
-     * localities to avoid having the MPI layer fetch data
-     * for every process in the job */
-    flux_pname.jobid = OPAL_PROC_MY_NAME.jobid;
-    if (!got_modex_data) {
-        got_modex_data = true;
-        /* we only need to set locality for each local rank as "not found"
-         * equates to "non-local" */
-        for (i=0; i < nlranks; i++) {
-            flux_pname.vpid = lranks[i];
-            rc = opal_pmix_base_cache_keys_locally(&flux_pname, OPAL_PMIX_CPUSET,
-                                                   &kp, pmix_kvs_name, pmix_vallen_max, kvs_get);
-            if (OPAL_SUCCESS != rc) {
-                OPAL_ERROR_LOG(rc);
-                goto cleanup;
-            }
-            if (NULL == kp || NULL == kp->data.string) {
-                /* if we share a node, but we don't know anything more, then
-                 * mark us as on the node as this is all we know */
-                locality = OPAL_PROC_ON_CLUSTER | OPAL_PROC_ON_CU | OPAL_PROC_ON_NODE;
-            } else {
-                /* determine relative location on our node */
-                locality = opal_hwloc_base_get_relative_locality(opal_hwloc_topology,
-                                                                 opal_process_info.cpuset,
-                                                                 kp->data.string);
-            }
-            if (NULL != kp) {
-                OBJ_RELEASE(kp);
-            }
-            OPAL_OUTPUT_VERBOSE((1, opal_pmix_base_framework.framework_output,
-                                 "%s pmix:flux proc %s locality %s",
-                                 OPAL_NAME_PRINT(OPAL_PROC_MY_NAME),
-                                 OPAL_NAME_PRINT(flux_pname),
-                                 opal_hwloc_base_print_locality(locality)));
-
-            OBJ_CONSTRUCT(&kvn, opal_value_t);
-            kvn.key = strdup(OPAL_PMIX_LOCALITY);
-            kvn.type = OPAL_UINT16;
-            kvn.data.uint16 = locality;
-            opal_pmix_base_store(&flux_pname, &kvn);
-            OBJ_DESTRUCT(&kvn);
-        }
-    }
-
-cleanup:
-    if (NULL != op->opcbfunc) {
-        op->opcbfunc(rc, op->cbdata);
-    }
-    OBJ_RELEASE(op);
-    return;
-}
-
-static int flux_fencenb(opal_list_t *procs, int collect_data,
-                      opal_pmix_op_cbfunc_t cbfunc, void *cbdata)
-{
-    pmi_opcaddy_t *op;
-
-    /* thread-shift this so we don't block in PMI barrier */
-    op = OBJ_NEW(pmi_opcaddy_t);
-    op->opcbfunc = cbfunc;
-    op->cbdata = cbdata;
-    event_assign(&op->ev, opal_pmix_base.evbase, -1,
-                 EV_WRITE, fencenb, op);
-    event_active(&op->ev, EV_WRITE, 1);
-
-    return OPAL_SUCCESS;
-}
-
-#define FLUX_WAIT_FOR_COMPLETION(a)             \
-    do {                                        \
-        while ((a)) {                           \
-            usleep(10);                         \
-        }                                       \
-    } while (0)
-
-struct fence_result {
-    volatile int flag;
-    int status;
-};
-
-static void fence_release(int status, void *cbdata)
-{
-    struct fence_result *res = (struct fence_result*)cbdata;
-    res->status = status;
-    opal_atomic_wmb();
-    res->flag = 0;
-}
-
 static int flux_fence(opal_list_t *procs, int collect_data)
 {
-    struct fence_result result = { 1, OPAL_SUCCESS };
-    flux_fencenb(procs, collect_data, fence_release, (void*)&result);
-    FLUX_WAIT_FOR_COMPLETION(result.flag);
-    return result.status;
+    int rc;
+    if (PMI_SUCCESS != (rc = PMI_Barrier())) {
+        OPAL_PMI_ERROR(rc, "PMI_Barrier");
+        return OPAL_ERROR;
+    }
+    return OPAL_SUCCESS;
 }
-
 
 static int flux_get(const opal_process_name_t *id,
                   const char *key, opal_list_t *info,
