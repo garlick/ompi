@@ -305,7 +305,7 @@ static int flux_init(void)
     int spawned;
     int rc, ret = OPAL_ERROR;
     int i, rank, lrank, nrank;
-    char *pmix_id, tmp[64];
+    char tmp[64];
     opal_value_t kv;
     const char *jobid;
     opal_process_name_t ldr;
@@ -347,23 +347,10 @@ static int flux_init(void)
         goto err_exit;
     }
 
-    // Initialize job environment information
-    pmix_id = (char*)malloc(pmix_vallen_max);
-    if (pmix_id == NULL) {
-        ret = OPAL_ERR_OUT_OF_RESOURCE;
-        goto err_exit;
-    }
-    /* Get domain id */
-    if (PMI_SUCCESS != (rc = PMI_KVS_Get_my_name (pmix_id, pmix_vallen_max))) {
-        free(pmix_id);
-        goto err_exit;
-    }
-
     /* get our rank */
     ret = PMI_Get_rank(&rank);
     if( PMI_SUCCESS != ret ) {
         OPAL_PMI_ERROR(ret, "PMI_Get_rank");
-        free(pmix_id);
         goto err_exit;
     }
 
