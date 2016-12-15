@@ -703,6 +703,18 @@ static int flux_get(const opal_process_name_t *id,
                         "%s pmix:flux called get for key %s",
                         OPAL_NAME_PRINT(OPAL_PROC_MY_NAME), key);
 
+    /* Keys presumed stored directly to cache by flux_init() under the
+     * wildcard rank must not trigger PMI_KVS_Get() if not found. */
+    if (id->vpid == OPAL_VPID_WILDCARD) {
+        opal_list_t values;
+        OBJ_CONSTRUCT(&values, opal_list_t);
+        rc = opal_pmix_base_fetch (id, key, &values);
+        OPAL_LIST_DESTRUCT(&values);
+        if (OPAL_SUCCESS != rc) {
+            return rc;
+        }
+    }
+
     rc = opal_pmix_base_cache_keys_locally(id, key, kv, pmix_kvs_name, pmix_vallen_max, kvs_get);
     opal_output_verbose(2, opal_pmix_base_framework.framework_output,
                         "%s pmix:flux got key %s",
