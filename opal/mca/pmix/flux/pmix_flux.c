@@ -348,9 +348,9 @@ static int flux_init(void)
     }
 
     /* get our rank */
-    ret = PMI_Get_rank(&rank);
-    if( PMI_SUCCESS != ret ) {
-        OPAL_PMI_ERROR(ret, "PMI_Get_rank");
+    rc = PMI_Get_rank(&rank);
+    if (PMI_SUCCESS != rc) {
+        OPAL_PMI_ERROR(rc, "PMI_Get_rank");
         goto err_exit;
     }
 
@@ -414,7 +414,7 @@ static int flux_init(void)
     /* get our local proc info to find our local rank */
     if (PMI_SUCCESS != (rc = PMI_Get_clique_size(&nlranks))) {
         OPAL_PMI_ERROR(rc, "PMI_Get_clique_size");
-        return rc;
+        goto err_exit;
     }
     /* save the local size */
     OBJ_CONSTRUCT(&kv, opal_value_t);
@@ -434,14 +434,14 @@ static int flux_init(void)
         /* now get the specific ranks */
         lranks = (int*)calloc(nlranks, sizeof(int));
         if (NULL == lranks) {
-            rc = OPAL_ERR_OUT_OF_RESOURCE;
+            ret = OPAL_ERR_OUT_OF_RESOURCE;
             OPAL_ERROR_LOG(rc);
-            return rc;
+            goto err_exit;
         }
         if (PMI_SUCCESS != (rc = PMI_Get_clique_ranks(lranks, nlranks))) {
             OPAL_PMI_ERROR(rc, "PMI_Get_clique_ranks");
             free(lranks);
-            return rc;
+            goto err_exit;
         }
         /* note the local ldr */
         ldr.vpid = lranks[0];
@@ -504,9 +504,9 @@ static int flux_init(void)
     OBJ_DESTRUCT(&kv);
 
     /* get universe size */
-    ret = PMI_Get_universe_size(&i);
-    if (PMI_SUCCESS != ret) {
-        OPAL_PMI_ERROR(ret, "PMI_Get_universe_size");
+    rc = PMI_Get_universe_size(&i);
+    if (PMI_SUCCESS != rc) {
+        OPAL_PMI_ERROR(rc, "PMI_Get_universe_size");
         goto err_exit;
     }
     /* push this into the dstore for subsequent fetches */
@@ -534,9 +534,9 @@ static int flux_init(void)
 
 
     /* get job size */
-    ret = PMI_Get_size(&i);
-    if (PMI_SUCCESS != ret) {
-        OPAL_PMI_ERROR(ret, "PMI_Get_size");
+    rc = PMI_Get_size(&i);
+    if (PMI_SUCCESS != rc) {
+        OPAL_PMI_ERROR(rc, "PMI_Get_size");
         goto err_exit;
     }
     OBJ_CONSTRUCT(&kv, opal_value_t);
@@ -551,9 +551,9 @@ static int flux_init(void)
     OBJ_DESTRUCT(&kv);
 
     /* get appnum */
-    ret = PMI_Get_appnum(&i);
-    if (PMI_SUCCESS != ret) {
-        OPAL_PMI_ERROR(ret, "PMI_Get_appnum");
+    rc = PMI_Get_appnum(&i);
+    if (PMI_SUCCESS != rc) {
+        OPAL_PMI_ERROR(rc, "PMI_Get_appnum");
         goto err_exit;
     }
     OBJ_CONSTRUCT(&kv, opal_value_t);
