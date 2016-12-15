@@ -574,7 +574,7 @@ static int flux_init(void)
 
 err_exit:
     PMI_Finalize();
-    return ret;
+    return (ret == OPAL_SUCCESS ? OPAL_ERROR : ret);
 }
 
 static int flux_fini(void) {
