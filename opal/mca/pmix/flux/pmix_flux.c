@@ -368,9 +368,12 @@ static int flux_init(void)
     }
 
     /* get integer job id */
-    flux_pname.jobid = 0;
-    if ((jobid = getenv ("FLUX_JOB_ID")))
-        flux_pname.jobid = strtoul(jobid, NULL, 10);
+    if (!(jobid = getenv ("FLUX_JOB_ID"))) {
+        opal_output(0, "getenv FLUX_JOB_ID [%s:%d:%s]: failed\n",
+                    __FILE__, __LINE__, __func__);
+        goto err_exit;
+    }
+    flux_pname.jobid = strtoul(jobid, NULL, 10);
     ldr.jobid = flux_pname.jobid;
     flux_pname.vpid = rank;
     /* store our name in the opal_proc_t so that
